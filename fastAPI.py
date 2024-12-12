@@ -349,7 +349,76 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         return dict(user._mapping)
     except JWTError:
         raise credentials_exception
+@app.get("/student/courses/{email}")
 
+#這個端點會：
+    #接收學生的email作為參數
+    #從數據庫中查詢該學生的所有課程信息
+    #將查詢結果格式化為前端需要的格式
+    #返回JSON格式的課程列表
+async def get_student_courses(email: str, db: Session = Depends(get_db)):
+    try:
+        
+        print(f"Received request for email: {email}")
+        # 從 email 提取學號（假設學號是@前的部分）
+        student_id = email.split('@')[0]
+        print(f"Extracted student_id: {student_id}")
+        # 查詢該學生的所有課程
+        query = text("""
+            SELECT 
+                c.course_id,
+                c.title,
+                c.course_code,
+                c.description,
+                t.full_name AS teacher_name,
+                ce.enrollment_date,
+                CONCAT('113學年度 第 1 學期') as semester
+            FROM courses c
+            JOIN course_enrollments ce ON c.course_id = ce.course_id
+            JOIN users s ON ce.user_id = s.user_id
+            JOIN users t ON c.teacher_id = t.user_id
+            WHERE s.email = :email
+            ORDER BY ce.enrollment_date DESC
+        """)
+        #print(f"Executing query with email: {email}")                      #調適輸出
+        results = db.execute(query, {"email": email}).fetchall()
+        print(f"Query results: {results}")                                 #調適輸出
+        # 轉換查詢結果為列表
+        courses = []
+        for row in results:
+            course = dict(row._mapping)
+            formatted_course = {
+                "title": f"{course['course_code']} {course['title']}",
+                "semester": course['semester'],
+                "teacher": course['teacher_name'],
+                "description": course['description'],
+                "enrollment_date": course['enrollment_date'].strftime("%Y-%m-%d") if course['enrollment_date'] else None
+            }
+            courses.append(formatted_course)
+            
+        # return {
+        #     "status": "success",
+        #     "courses": courses
+        # }
+         # 設置響應頭，確保正確的編碼
+        return JSONResponse(
+            content={
+                "status": "success",
+                "courses": courses
+            },
+            headers={"Content-Type": "application/json; charset=utf-8"}
+        )
+            
+    except Exception as e:
+        print(f"Error fetching courses: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": "獲取課程信息時發生錯誤",
+                "error_detail": str(e)
+            }
+        )
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("fastAPI:app", host="192.168.196.159", port=8000, reload=True)

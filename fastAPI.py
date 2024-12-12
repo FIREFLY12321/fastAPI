@@ -9,7 +9,7 @@ import json
 from fastapi.responses import JSONResponse
 # 12/9這邊新增登入頁
 from datetime import datetime, timedelta
-from jose import JWTError, jwt
+from jose import JWTError, jwt#jwt尚未實作(1212)
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 app = FastAPI()
 
@@ -30,7 +30,7 @@ def get_db():
         yield db
     finally:
         db.close()
-
+#change
 @app.post("/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     try:
@@ -81,7 +81,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     else:
         expire = datetime.utcnow() + timedelta(minutes=15)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)#JWT尚未實裝
     return encoded_jwt
 
 

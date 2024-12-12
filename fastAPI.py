@@ -251,49 +251,62 @@ async def create_user(user: UserCreate, db: Session = Depends(get_db)):
 @app.post("/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     try:
-        # 直接使用 MySQL 查詢驗證用戶
-        query = text("""
-            SELECT user_id, email, password_hash, user_type, full_name 
-            FROM users 
-            WHERE email = :email 
-            AND password_hash = :password
-        """)
+        email_query = text("SELECT * FROM users WHERE email = :email")
+        user = db.execute(email_query, {"email": form_data.username}).first()
         
-        result = db.execute(query, {
-            "email": form_data.username,
-            "password": form_data.password
-        }).first()
-        
-        print(f"Login attempt - Email: {form_data.username}")
-        print(f"Query result: {result}")
-
-        if result:
-            # 登入成功
-            user_dict = dict(result._mapping)
-            return {
-                "status": "success",
-                "message": "登入成功",
-                "user": {
-                    "user_id": user_dict['user_id'],
-                    "email": user_dict['email'],
-                    "user_type": user_dict['user_type'],
-                    "full_name": user_dict['full_name']
-                }
-            }
-        else:
-            # 登入失敗
+        if not user:
             return JSONResponse(
                 status_code=401,
-                content={"status": "error", "message": "電子郵件或密碼錯誤"}
+                content={
+                    "status": "error",
+                    "message": "此電子郵件尚未註冊",
+                    "error_type": "email_not_found"
+                }
             )
+
+        user_dict = dict(user._mapping)
+        if form_data.password != user_dict['password_hash']:
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "status": "error",
+                    "message": "密碼錯誤",
+                    "error_type": "wrong_password"
+                }
+            )
+
+        # 生成 access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user_dict['email']},
+            expires_delta=access_token_expires
+        )
+
+        # 成功回傳
+        return {
+            "status": "success",
+            "message": "登入成功",
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "user_id": user_dict['user_id'],
+                "email": user_dict['email'],
+                "user_type": user_dict['user_type'],
+                "full_name": user_dict['full_name']
+            }
+        }
             
     except Exception as e:
         print(f"Login error: {str(e)}")
         return JSONResponse(
             status_code=500,
-            content={"status": "error", "message": f"系統錯誤：{str(e)}"}
+            content={
+                "status": "error",
+                "message": "系統錯誤",
+                "error_type": "system_error"
+            }
         )
-    
+        
 # GET /users/ 端點
 @app.get("/users/")
 async def read_users(db: Session = Depends(get_db)):
@@ -314,6 +327,28 @@ async def delete_user(user_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        
+        query = text("SELECT * FROM users WHERE email = :email")
+        user = db.execute(query, {"email": email}).first()
+        if user is None:
+            raise credentials_exception
+        return dict(user._mapping)
+    except JWTError:
+        raise credentials_exception
 
 if __name__ == "__main__":
     import uvicorn

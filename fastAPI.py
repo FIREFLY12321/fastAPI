@@ -388,11 +388,12 @@ async def get_student_courses(email: str, db: Session = Depends(get_db)):
         for row in results:
             course = dict(row._mapping)
             formatted_course = {
-                "title": f"{course['course_code']} {course['title']}",
+                "title": course['title'],
                 "semester": course['semester'],
                 "teacher": course['teacher_name'],
                 "description": course['description'],
-                "enrollment_date": course['enrollment_date'].strftime("%Y-%m-%d") if course['enrollment_date'] else None
+                "courseCode" : course["course_code"]
+                #"enrollment_date": course['enrollment_date'].strftime("%Y-%m-%d") if course['enrollment_date'] else None
             }
             courses.append(formatted_course)
             
@@ -401,10 +402,14 @@ async def get_student_courses(email: str, db: Session = Depends(get_db)):
         #     "courses": courses
         # }
          # 設置響應頭，確保正確的編碼
-        return JSONResponse(
+        return JSONResponse(#12/12更改編碼
             content={
-                "status": "success",
-                "courses": courses
+                "status": "success"                 ,
+                "courses": courses                  ,
+                #"teacher": courses['teacher_name']  ,#
+                #"coursCode": courses['courseCode' ] ,#
+
+                
             },
             headers={"Content-Type": "application/json; charset=utf-8"}
         )

@@ -428,8 +428,9 @@ async def get_student_courses(email: str, db: Session = Depends(get_db)):
 @app.get("/course-members/{course_code}")
 async def get_course_members(course_code: str, db: Session = Depends(get_db)):
     try:
-        print(f"收到課程成員請求 - 課程代碼: {course_code}")  # 添加日誌
+        print(f"收到課程成員請求 - 課程代碼: {course_code}")
         
+        # 使用 text 來創建 SQL 查詢
         query = text("""
             SELECT u.student_id, u.full_name
             FROM users u
@@ -442,7 +443,7 @@ async def get_course_members(course_code: str, db: Session = Depends(get_db)):
         """)
         
         result = db.execute(query, {"course_code": course_code}).fetchall()
-        print(f"查詢結果: {result}")  # 添加日誌
+        print(f"查詢結果: {result}")
         
         members = [
             {
@@ -451,21 +452,34 @@ async def get_course_members(course_code: str, db: Session = Depends(get_db)):
             }
             for row in result
         ]
-        print(f"格式化後的成員數據: {members}")  # 添加日誌
+        print(f"格式化後的成員數據: {members}")
         
-        return {
-            "status": "success",
-            "members": members
-        }
+        # 使用 JSONResponse 並設置正確的編碼
+        return JSONResponse(
+            content={
+                "status": "success",
+                "members": members
+            },
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*"
+            },
+            media_type="application/json",
+        )
         
     except Exception as e:
-        print(f"錯誤詳情: {str(e)}")  # 添加詳細錯誤信息
-        return JSONResponse(
+        print(f"錯誤詳情: {str(e)}")
+        return JSONResponse(  #加utf8編碼 
             status_code=500,
             content={
                 "status": "error",
-                "message": f"獲取課程成員時發生錯誤: {str(e)}"  # 返回具體錯誤信息
-            }
+                "message": f"獲取課程成員時發生錯誤: {str(e)}"
+            },
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Access-Control-Allow-Origin": "*"
+            },
+            media_type="application/json",
         )
 
 if __name__ == "__main__":

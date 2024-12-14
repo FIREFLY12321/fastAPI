@@ -424,6 +424,50 @@ async def get_student_courses(email: str, db: Session = Depends(get_db)):
                 "error_detail": str(e)
             }
         )
+#FastAPI endpoint 來獲取課程成員
+@app.get("/course-members/{course_code}")
+async def get_course_members(course_code: str, db: Session = Depends(get_db)):
+    try:
+        print(f"收到課程成員請求 - 課程代碼: {course_code}")  # 添加日誌
+        
+        query = text("""
+            SELECT u.student_id, u.full_name
+            FROM users u
+            JOIN course_enrollments ce ON u.user_id = ce.user_id
+            JOIN courses c ON ce.course_id = c.course_id
+            WHERE c.course_code = :course_code
+            AND u.user_type = 'student'
+            AND ce.status = 'active'
+            ORDER BY u.student_id
+        """)
+        
+        result = db.execute(query, {"course_code": course_code}).fetchall()
+        print(f"查詢結果: {result}")  # 添加日誌
+        
+        members = [
+            {
+                "student_id": row.student_id,
+                "full_name": row.full_name
+            }
+            for row in result
+        ]
+        print(f"格式化後的成員數據: {members}")  # 添加日誌
+        
+        return {
+            "status": "success",
+            "members": members
+        }
+        
+    except Exception as e:
+        print(f"錯誤詳情: {str(e)}")  # 添加詳細錯誤信息
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"獲取課程成員時發生錯誤: {str(e)}"  # 返回具體錯誤信息
+            }
+        )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("fastAPI:app", host="192.168.196.159", port=8000, reload=True)

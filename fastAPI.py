@@ -589,6 +589,101 @@ async def get_all_courses(db: Session = Depends(get_db)):
             status_code=500,
             detail=f"獲取課程列表時發生錯誤: {str(e)}"
         )
+    
+@app.put("/courses/{course_code}")
+async def update_course(
+    course_code: str,
+    course: CourseCreate,
+    db: Session = Depends(get_db)
+):
+    try:
+        # 檢查課程是否存在
+        check_query = text("""
+            SELECT course_id FROM courses 
+            WHERE course_code = :course_code
+        """)
+        existing_course = db.execute(check_query, {"course_code": course_code}).first()
+        
+        if not existing_course:
+            raise HTTPException(status_code=404, detail="課程不存在")
+        
+        # 檢查新的課程代碼是否與其他課程衝突（如果更改了課程代碼）
+        if course_code != course.course_code:
+            check_code_query = text("""
+                SELECT 1 FROM courses 
+                WHERE course_code = :new_code AND course_code != :old_code
+            """)
+            code_exists = db.execute(check_code_query, {
+                "new_code": course.course_code,
+                "old_code": course_code
+            }).first()
+            if code_exists:
+                raise HTTPException(status_code=400, detail="新的課程代碼已存在")
+
+        # 更新課程
+        update_query = text("""
+            UPDATE courses 
+            SET title = :title,
+                description = :description,
+                teacher_id = :teacher_id,
+                course_code = :new_code,
+                is_active = :is_active
+            WHERE course_code = :old_code
+        """)
+        
+        db.execute(update_query, {
+            "title": course.title,
+            "description": course.description,
+            "teacher_id": course.teacher_id,
+            "new_code": course.course_code,
+            "is_active": course.is_active,
+            "old_code": course_code
+        })
+        db.commit()
+        
+        return {"status": "success", "message": "課程更新成功"}
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/courses/{course_code}")
+async def delete_course(course_code: str, db: Session = Depends(get_db)):
+    try:
+        # 檢查課程是否存在
+        check_query = text("""
+            SELECT course_id FROM courses 
+            WHERE course_code = :course_code
+        """)
+        existing_course = db.execute(check_query, {"course_code": course_code}).first()
+        
+        if not existing_course:
+            raise HTTPException(status_code=404, detail="課程不存在")
+        
+        # 刪除相關的選課記錄
+        delete_enrollments_query = text("""
+            DELETE FROM course_enrollments 
+            WHERE course_id = :course_id
+        """)
+        db.execute(delete_enrollments_query, {"course_id": existing_course.course_id})
+        
+        # 刪除課程
+        delete_course_query = text("""
+            DELETE FROM courses 
+            WHERE course_code = :course_code
+        """)
+        db.execute(delete_course_query, {"course_code": course_code})
+        
+        db.commit()
+        return {"status": "success", "message": "課程刪除成功"}
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

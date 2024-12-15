@@ -11,6 +11,12 @@ from fastapi.responses import JSONResponse
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from typing import Optional
+
+
+
+
+
 app = FastAPI()
 
 # JWT 相關設置
@@ -89,10 +95,10 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
 # CORS 設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins    =["*"],
+    allow_credentials=True ,
+    allow_methods    =["*"],
+    allow_headers    =["*"],
 )
 
 # 數據庫配置
@@ -102,11 +108,11 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # 用戶模型
 class UserCreate(BaseModel):
-    username: str
-    email: str
-    password: str
-    full_name: str
-    user_type: str
+    username:   str
+    email:      str
+    password:   str
+    full_name:  str
+    user_type:  str
     student_id: str
 
     @validator('student_id')
@@ -382,7 +388,7 @@ async def get_student_courses(email: str, db: Session = Depends(get_db)):
         """)
         #print(f"Executing query with email: {email}")                      #調適輸出
         results = db.execute(query, {"email": email}).fetchall()
-        print(f"Query results: {results}")                                 #調適輸出
+        print(f"Query results: {results}")                                  #調適輸出
         # 轉換查詢結果為列表
         courses = []
         for row in results:
@@ -481,6 +487,62 @@ async def get_course_members(course_code: str, db: Session = Depends(get_db)):
             },
             media_type="application/json",
         )
+
+# 課程創建的資料模型
+class CourseCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    teacher_id: int
+    course_code: str
+    is_active: bool = True
+
+@app.post("/courses/", response_model=dict)
+async def create_course(course: CourseCreate, db: Session = Depends(get_db)):
+    try:
+        # 檢查課程代碼是否已存在
+        check_code_query = text("SELECT 1 FROM courses WHERE course_code = :code")
+        existing_course = db.execute(check_code_query, {"code": course.course_code}).first()
+        if existing_course:
+            raise HTTPException(status_code=400, detail="課程代碼已存在")
+
+        # 檢查教師是否存在
+        check_teacher_query = text("""
+            SELECT 1 FROM users 
+            WHERE user_id = :teacher_id AND user_type = 'teacher'
+        """)
+        teacher = db.execute(check_teacher_query, {"teacher_id": course.teacher_id}).first()
+        if not teacher:
+            raise HTTPException(status_code=400, detail="找不到該教師或該用戶不是教師")
+
+        # 創建新課程
+        insert_query = text("""
+            INSERT INTO courses 
+            (title, description, teacher_id, course_code, is_active) 
+            VALUES 
+            (:title, :description, :teacher_id, :course_code, :is_active)
+        """)
+
+        result = db.execute(insert_query, {
+            "title": course.title,
+            "description": course.description,
+            "teacher_id": course.teacher_id,
+            "course_code": course.course_code,
+            "is_active": course.is_active
+        })
+        db.commit()
+
+        return {
+            "status": "success",
+            "message": "課程創建成功",
+            "course_id": result.lastrowid
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"創建課程時發生錯誤: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn

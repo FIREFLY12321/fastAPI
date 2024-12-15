@@ -544,6 +544,53 @@ async def create_course(course: CourseCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"創建課程時發生錯誤: {str(e)}")
 
 
+@app.get("/courses/")
+async def get_all_courses(db: Session = Depends(get_db)):
+    try:
+        # 查詢所有課程和對應的教師信息
+        query = text("""
+            SELECT 
+                c.course_id,
+                c.title,
+                c.course_code,
+                c.description,
+                c.is_active,
+                u.full_name as teacher_name,
+                u.user_id as teacher_id
+            FROM courses c
+            LEFT JOIN users u ON c.teacher_id = u.user_id
+            WHERE c.is_active = TRUE
+            ORDER BY c.course_code
+        """)
+        
+        results = db.execute(query).fetchall()
+        
+        # 轉換查詢結果
+        courses = []
+        for row in results:
+            course_data = dict(row._mapping)
+            courses.append({
+                "title": course_data['title'],
+                "course_code": course_data['course_code'],
+                "description": course_data['description'],
+                "teacher_name": course_data['teacher_name'],
+                "teacher_id": course_data['teacher_id']
+            })
+        
+        # 返回標準格式的響應
+        return {
+            "status": "success",
+            "courses": courses
+        }
+            
+    except Exception as e:
+        print(f"Error in get_all_courses: {str(e)}")  # 添加服務器端日誌
+        raise HTTPException(
+            status_code=500,
+            detail=f"獲取課程列表時發生錯誤: {str(e)}"
+        )
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("fastAPI:app", host="192.168.196.159", port=8000, reload=True)
